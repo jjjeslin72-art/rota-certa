@@ -7,6 +7,8 @@
 <meta name="theme-color" content="#0f766e">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
   :root{--c:#0f766e;--c2:#14b8a6;--bg:#f4f6f5;--card:#fff;--tx:#1f2937;--mut:#6b7280;--ok:#16a34a;--warn:#dc2626}
   *{box-sizing:border-box}
@@ -56,6 +58,38 @@
   .links a{display:block;margin-top:8px;text-align:center;background:#1a73e8;color:#fff;padding:12px;border-radius:10px;text-decoration:none;font-weight:700}
   .hidden{display:none}
   footer{text-align:center;color:var(--mut);font-size:11px;padding:10px 0 30px}
+  /* ---- 길안내 화면 ---- */
+  #nav{position:fixed;inset:0;z-index:5000;background:#e5e7eb}
+  #navmap{position:absolute;inset:0}
+  .nb{position:absolute;top:10px;left:10px;right:10px;background:#0b5f56;color:#fff;border-radius:16px;padding:12px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 14px #0005;z-index:2}
+  .nb-ic{flex:0 0 64px;height:64px;display:flex;align-items:center;justify-content:center;font-size:42px}
+  .nb-d{font-size:34px;font-weight:800;line-height:1.05}
+  .nb-t{font-size:18px;font-weight:600;opacity:.95;line-height:1.25}
+  .lanes{position:absolute;left:10px;right:10px;background:#083f3a;border-radius:0 0 14px 14px;display:flex;justify-content:center;gap:6px;padding:6px 8px;z-index:1}
+  .lanes:empty{display:none}
+  .lane{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#ffffff14}
+  .lane.on{background:#ef4444}
+  .lane svg{width:26px;height:26px}
+  .lane:not(.on) svg{opacity:.45}
+  .nthen{position:absolute;left:10px;background:#083f3a;color:#fff;border-radius:12px;padding:8px 12px;font-size:16px;font-weight:700;z-index:1}
+  .nthen:empty{display:none}
+  .spd{position:absolute;left:12px;bottom:110px;width:74px;height:74px;border-radius:50%;background:#fff;box-shadow:0 2px 8px #0004;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2}
+  .spd b{font-size:26px;line-height:1}.spd span{font-size:12px;color:#555}
+  .nmsg{position:absolute;left:50%;transform:translateX(-50%);bottom:112px;background:#111c;color:#fff;padding:8px 14px;border-radius:20px;font-size:15px;z-index:2}
+  .nmsg:empty{display:none}
+  .nbot{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:20px 20px 0 0;padding:14px 16px 22px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 -2px 12px #0003;z-index:2}
+  .nbot button{width:58px;height:58px;border-radius:50%;border:2px solid #ddd;background:#fff;font-size:24px}
+  .eta{text-align:center}
+  .eta b{display:block;font-size:28px;color:#15803d}
+  .eta span{font-size:16px;color:#555}
+  #nArrive{position:absolute;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:5}
+  #nArrive .box{background:#fff;border-radius:18px;padding:22px;width:86%;max-width:380px;text-align:center}
+  #nArrive h2{margin:6px 0 4px;font-size:24px}
+  #nArrive p{color:#555;margin:0 0 16px}
+  #nArrive button{width:100%;margin-top:8px}
+  .nomap #navmap{display:none}
+  .n{background:#0f766e;color:#fff}
+  .navbtns{display:flex;flex-direction:column;gap:8px}
 </style>
 </head>
 <body>
@@ -91,6 +125,7 @@
       <div><b id="sTime">0</b><span data-t="sTime"></span></div>
     </div>
     <div id="map"></div>
+    <div class="card navbtns"><button class="btn main-btn" id="navNext" data-t="navNext"></button><button class="btn sub" id="simNext" data-t="sim"></button></div>
     <div class="card"><div id="list"></div></div>
     <div class="card links">
       <label data-t="allRoute"></label>
@@ -101,6 +136,25 @@
   </section>
   <footer>Mapa © OpenStreetMap · Rotas: OSRM</footer>
 </main>
+
+<div id="nav" class="hidden">
+  <div id="navmap"></div>
+  <div class="nb"><div class="nb-ic" id="nIcon"></div><div style="min-width:0"><div class="nb-d" id="nDist"></div><div class="nb-t" id="nText"></div></div></div>
+  <div class="lanes" id="nLanes"></div>
+  <div class="nthen" id="nThen"></div>
+  <div class="spd"><b id="nSpd">0</b><span>km/h</span></div>
+  <div class="nmsg" id="nMsg"></div>
+  <div class="nbot">
+    <button id="nEnd" aria-label="end">✕</button>
+    <div class="eta"><b id="nEta">--</b><span id="nRem"></span></div>
+    <button id="nVoice" aria-label="voice">🔊</button>
+  </div>
+  <div id="nArrive" class="hidden"><div class="box">
+    <div style="font-size:48px">🏁</div><h2 data-t="arrived"></h2><p id="nArrName"></p>
+    <button class="btn main-btn" id="nDoneNext" data-t="doneNext"></button>
+    <button class="btn sub" id="nClose" data-t="close"></button>
+  </div></div>
+</div>
 
 <script>
 const T={
@@ -275,13 +329,17 @@ function render(){
       ${(s.found&&!s.isEnd)?`<div class="ad">📍 ${esc(s.found.split(",").slice(0,4).join(","))}</div>`:""}
       ${s.phone?`<div class="ad">📞 ${esc(s.phone)}</div>`:""}
       <div class="lg">+ ${(s.dist/1000).toFixed(1)} km · ${fmtTime(s.dur)}</div>
-      <div class="acts"><a class="g" href="${gUrl(s)}" target="_blank" rel="noopener">${t("nav")}</a>
+      <div class="acts">${s.done?"":`<button class="n" data-n="${i}">${NT[lang].navStart}</button>`}<a class="g" href="${gUrl(s)}" target="_blank" rel="noopener">${t("nav")}</a>
       <a class="w" href="${wUrl(s)}" target="_blank" rel="noopener">${t("waze")}</a>
       ${wa?`<a class="z" href="https://wa.me/${wa}" target="_blank" rel="noopener">${t("wa")}</a>`:""}
       <button class="d" data-i="${i}">${s.done?t("undo"):"✓ "+t("done")}</button></div></div></div>`;
   });
   if(nextIdx===-1)html=`<div style="text-align:center;font-weight:700;padding:10px;color:var(--ok)">${t("allDone")}</div>`+html;
   $("list").innerHTML=html;
+  $("list").querySelectorAll("button.n").forEach(b=>b.onclick=()=>startNav(+b.dataset.n,false));
+  const nx=trip.stops.findIndex(s=>!s.done);
+  $("navNext").style.display=$("simNext").style.display=nx<0?"none":"";
+  $("navNext").onclick=()=>startNav(nx,false);$("simNext").onclick=()=>startNav(nx,true);
   $("list").querySelectorAll("button.d").forEach(b=>b.onclick=()=>{const s=trip.stops[+b.dataset.i];s.done=!s.done;store.set("rc_trip",trip);render()});
   // 10곳씩 나눠서 구글지도 링크
   const pts=[trip.start,...trip.stops];let ch="",k=1;
@@ -312,6 +370,231 @@ function drawMap(nextIdx){
 }
 
 $("reset").onclick=()=>{trip=null;store.set("rc_trip",null);$("result").classList.add("hidden");status("");window.scrollTo({top:0,behavior:"smooth"})};
+
+
+// ===================== 길안내 화면 =====================
+const NT={
+ ko:{arrived:"도착했어요!",doneNext:"✓ 완료하고 다음 곳 안내",close:"닫기",navStart:"▶ 안내",navNext:"▶ 다음 곳 안내 시작",sim:"🎬 모의 주행으로 미리보기",
+  reroute:"경로를 다시 찾는 중...",noGps:"GPS를 기다리는 중... 위치 허용을 눌러 주세요",simOn:"모의 주행 중",then:"그다음",ahead:"앞",now:"곧",
+  left:"좌회전",right:"우회전","slight left":"왼쪽 방향","slight right":"오른쪽 방향","sharp left":"급좌회전","sharp right":"급우회전",uturn:"유턴",straight:"직진",
+  arrive:"목적지 도착",depart:"출발",offRamp:"출구로 나가기",onRamp:"진입로로 들어가기",merge:"합류하기",fork:"갈림길",keepL:"왼쪽 길 유지",keepR:"오른쪽 길 유지",
+  round:n=>`회전교차로에서 ${n}번째 출구`,on:"",m:"미터",km:"킬로미터",inX:d=>`${d} 앞에서`,allDone:"모든 배송이 끝났어요"},
+ pt:{arrived:"Você chegou!",doneNext:"✓ Entregue, ir para a próxima",close:"Fechar",navStart:"▶ Navegar",navNext:"▶ Navegar até a próxima",sim:"🎬 Ver simulação",
+  reroute:"Recalculando a rota...",noGps:"Aguardando GPS... permita a localização",simOn:"Simulação",then:"Depois",ahead:"",now:"Agora",
+  left:"Vire à esquerda",right:"Vire à direita","slight left":"Mantenha-se à esquerda","slight right":"Mantenha-se à direita","sharp left":"Curva fechada à esquerda","sharp right":"Curva fechada à direita",uturn:"Faça o retorno",straight:"Siga em frente",
+  arrive:"Destino",depart:"Siga",offRamp:"Pegue a saída",onRamp:"Entre na rampa",merge:"Entre na via",fork:"Bifurcação",keepL:"Mantenha-se à esquerda",keepR:"Mantenha-se à direita",
+  round:n=>`Na rotatória, pegue a ${n}ª saída`,on:"",m:"metros",km:"quilômetros",inX:d=>`Em ${d},`,allDone:"Todas as entregas concluídas"}
+};
+Object.keys(NT).forEach(l=>Object.assign(T[l],{arrived:NT[l].arrived,doneNext:NT[l].doneNext,close:NT[l].close,navNext:NT[l].navNext,sim:NT[l].sim}));
+const nt=k=>NT[lang][k];
+
+// 화살표 아이콘
+const ANG={straight:0,"slight right":40,right:90,"sharp right":135,uturn:180,"sharp left":-135,left:-90,"slight left":-40};
+function arrowSvg(angle,color="#fff",size=56){
+  if(angle===180)return `<svg width="${size}" height="${size}" viewBox="0 0 48 48"><path d="M30 42V20a8 8 0 0 0-16 0v6" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round"/><path d="M6 24l8 9 8-9" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 48 48"><g transform="rotate(${angle} 24 30)"><path d="M24 44V10" stroke="${color}" stroke-width="6" stroke-linecap="round"/><path d="M12 21L24 8l12 13" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></g></svg>`;
+}
+function stepIcon(st){
+  const m=st.maneuver;
+  if(m.type==="arrive")return "🏁";
+  if(m.type==="roundabout"||m.type==="rotary"||m.type==="roundabout turn")return `<svg width="56" height="56" viewBox="0 0 48 48"><circle cx="24" cy="24" r="10" fill="none" stroke="#fff" stroke-width="5"/><path d="M24 14V4M18 6l6-4 6 4" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`;
+  return arrowSvg(ANG[m.modifier]??0);
+}
+function stepText(st){
+  const m=st.maneuver,mod=m.modifier,name=st.name||st.ref||"";
+  const nm=name?(lang==="ko"?` · ${name}`:` na ${name}`):"";
+  switch(m.type){
+    case "arrive":return nt("arrive");
+    case "depart":return nt("depart")+(name?(lang==="ko"?` · ${name}`:` pela ${name}`):"");
+    case "roundabout":case "rotary":case "roundabout turn":return nt("round")(m.exit||1)+nm;
+    case "off ramp":return nt("offRamp")+nm;
+    case "on ramp":return (mod&&mod.includes("left")?nt("keepL"):mod&&mod.includes("right")?nt("keepR"):nt("onRamp"))+nm;
+    case "fork":return (mod&&mod.includes("left")?nt("keepL"):nt("keepR"))+nm;
+    case "merge":return nt("merge")+nm;
+    default:return (nt(mod)||nt("straight"))+nm;
+  }
+}
+function fmtDist(m){return m<1000?(Math.max(10,Math.round(m/10)*10))+" m":(m/1000).toFixed(1)+" km"}
+function sayDist(m){return m<1000?Math.round(m/50)*50+" "+nt("m"):(m/1000).toFixed(1)+" "+nt("km")}
+
+// 거리 계산 (미터)
+function toXY(lat,lon,o){return [(lon-o.lon)*Math.cos(o.lat*Math.PI/180)*111320,(lat-o.lat)*110540]}
+function hav(a,b){const x=toXY(b.lat,b.lon,a);return Math.hypot(x[0],x[1])}
+function bearingOf(a,b){const y=Math.sin((b.lon-a.lon)*Math.PI/180)*Math.cos(b.lat*Math.PI/180);const x=Math.cos(a.lat*Math.PI/180)*Math.sin(b.lat*Math.PI/180)-Math.sin(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.cos((b.lon-a.lon)*Math.PI/180);return (Math.atan2(y,x)*180/Math.PI+360)%360}
+
+let nav=null,nmap=null,nmarker=null,voiceOn=store.get("rc_voice",true),wakeLock=null;
+
+async function fetchNavRoute(o,d){
+  const r=await fetch(`${OSRM}/route/v1/driving/${o.lon.toFixed(6)},${o.lat.toFixed(6)};${d.lon.toFixed(6)},${d.lat.toFixed(6)}?overview=full&geometries=geojson&steps=true`);
+  const j=await r.json(); if(j.code!=="Ok")throw new Error("route");
+  const rt=j.routes[0],steps=rt.legs[0].steps,pts=[];let cum=0;
+  steps.forEach((s,k)=>{
+    s.startCum=cum;
+    s.geometry.coordinates.forEach((c,ci)=>{
+      const p={lat:c[1],lon:c[0],step:k};
+      if(pts.length){const last=pts[pts.length-1];if(ci===0&&last.lat===p.lat&&last.lon===p.lon){return}cum+=hav(last,p)}
+      p.cum=cum;pts.push(p);
+    });
+  });
+  steps.forEach((s,k)=>s.endCum=k+1<steps.length?steps[k+1].startCum:cum);
+  return {pts,steps,total:cum,duration:rt.duration,line:rt.geometry.coordinates};
+}
+
+function project(pos){
+  const P=nav.r.pts;let best={d:1e9};
+  for(let i=0;i<P.length-1;i++){
+    const a=P[i],b=P[i+1],B=toXY(b.lat,b.lon,a),Q=toXY(pos.lat,pos.lon,a);
+    const L2=B[0]*B[0]+B[1]*B[1];let t=L2?(Q[0]*B[0]+Q[1]*B[1])/L2:0;t=Math.max(0,Math.min(1,t));
+    const d=Math.hypot(Q[0]-t*B[0],Q[1]-t*B[1]);
+    if(d<best.d)best={d,i,cum:a.cum+t*(b.cum-a.cum),lat:a.lat+t*(b.lat-a.lat),lon:a.lon+t*(b.lon-a.lon),brg:bearingOf(a,b)};
+  }
+  return best;
+}
+function pointAt(cum){
+  const P=nav.r.pts;
+  for(let i=0;i<P.length-1;i++){if(P[i+1].cum>=cum){const a=P[i],b=P[i+1],t=(cum-a.cum)/((b.cum-a.cum)||1);return {lat:a.lat+t*(b.lat-a.lat),lon:a.lon+t*(b.lon-a.lon)}}}
+  return P[P.length-1];
+}
+
+function speak(txt){
+  if(!voiceOn||!("speechSynthesis" in window))return;
+  try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.lang=lang==="ko"?"ko-KR":"pt-BR";speechSynthesis.speak(u)}catch(e){}
+}
+
+function initNavMap(center){
+  if(typeof maplibregl==="undefined"){$("nav").classList.add("nomap");return}
+  if(nmap){nmap.resize();return}
+  try{
+    nmap=new maplibregl.Map({container:"navmap",style:"https://tiles.openfreemap.org/styles/liberty",center:[center.lon,center.lat],zoom:16.5,pitch:60,attributionControl:{compact:true}});
+    nmap.on("load",()=>{
+      nmap.addSource("route",{type:"geojson",data:{type:"Feature",geometry:{type:"LineString",coordinates:nav?nav.r.line:[]}}});
+      nmap.addLayer({id:"route-case",type:"line",source:"route",layout:{"line-join":"round","line-cap":"round"},paint:{"line-color":"#1e3a8a","line-width":13}});
+      nmap.addLayer({id:"route-line",type:"line",source:"route",layout:{"line-join":"round","line-cap":"round"},paint:{"line-color":"#3b82f6","line-width":8}});
+    });
+    const el=document.createElement("div");
+    el.innerHTML=`<svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="20" fill="#fff" opacity=".9"/><path d="M22 6l11 28-11-6-11 6z" fill="#2563eb" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>`;
+    nmarker=new maplibregl.Marker({element:el,rotationAlignment:"map",pitchAlignment:"map"}).setLngLat([center.lon,center.lat]).addTo(nmap);
+  }catch(e){console.error(e);$("nav").classList.add("nomap")}
+}
+function setRouteOnMap(){
+  if(!nmap)return;
+  const src=nmap.getSource&&nmap.getSource("route");
+  if(src)src.setData({type:"Feature",geometry:{type:"LineString",coordinates:nav.r.line}});
+}
+
+function getPos(){
+  return new Promise(res=>{
+    if(!navigator.geolocation)return res(null);
+    navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lon:p.coords.longitude}),()=>res(null),{enableHighAccuracy:true,timeout:10000,maximumAge:5000});
+  });
+}
+
+async function startNav(i,sim){
+  const dest=trip.stops[i];if(!dest)return;
+  const prev=i>0?trip.stops[i-1]:trip.start;
+  $("nav").classList.remove("hidden");$("nArrive").classList.add("hidden");
+  $("nMsg").textContent=sim?"":nt("noGps");
+  let origin=sim?prev:(await getPos())||prev;
+  try{
+    nav={i,dest,sim,r:await fetchNavRoute(origin,dest),said:{},off:0,lastReroute:0,lastPos:null,lastT:0,simCum:0};
+  }catch(e){$("nMsg").textContent=t("netErr");return}
+  $("nMsg").textContent=sim?nt("simOn"):"";
+  initNavMap(origin);setRouteOnMap();
+  try{if("wakeLock" in navigator)wakeLock=await navigator.wakeLock.request("screen")}catch(e){}
+  if(sim){
+    nav.timer=setInterval(()=>{nav.simCum+=14;const p=pointAt(nav.simCum);onPos(p,50)},1000);
+    onPos(origin,0);
+  }else{
+    nav.watch=navigator.geolocation.watchPosition(p=>onPos({lat:p.coords.latitude,lon:p.coords.longitude},p.coords.speed!=null?p.coords.speed*3.6:null),
+      ()=>{$("nMsg").textContent=nt("noGps")},{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+    onPos(origin,null);
+  }
+}
+
+function stopNav(){
+  if(!nav)return;
+  if(nav.timer)clearInterval(nav.timer);
+  if(nav.watch!=null)navigator.geolocation.clearWatch(nav.watch);
+  try{wakeLock&&wakeLock.release()}catch(e){}
+  try{speechSynthesis.cancel()}catch(e){}
+  nav=null;
+}
+
+async function reroute(pos){
+  if(Date.now()-nav.lastReroute<8000)return;
+  nav.lastReroute=Date.now();nav.off=0;
+  $("nMsg").textContent=nt("reroute");speak(nt("reroute").replace("...",""));
+  try{nav.r=await fetchNavRoute(pos,nav.dest);nav.said={};setRouteOnMap();$("nMsg").textContent=""}catch(e){$("nMsg").textContent=t("netErr")}
+}
+
+function onPos(pos,kmh){
+  if(!nav||!nav.r)return;
+  const now=Date.now();
+  if(kmh==null&&nav.lastPos&&nav.lastT){const dt=(now-nav.lastT)/1000;if(dt>0)kmh=hav(nav.lastPos,pos)/dt*3.6}
+  nav.lastPos=pos;nav.lastT=now;
+  $("nSpd").textContent=Math.max(0,Math.round(kmh||0));
+  const pr=project(pos);
+  if(!nav.sim&&$("nMsg").textContent===nt("noGps"))$("nMsg").textContent="";
+  // 경로 이탈 → 다시 찾기
+  if(!nav.sim&&pr.d>55){if(++nav.off>=3){reroute(pos);}}else nav.off=0;
+  const R=nav.r,remain=Math.max(0,R.total-pr.cum);
+  // 도착
+  if(remain<35){arrive();return}
+  const sIdx=R.pts[pr.i].step,next=R.steps[sIdx+1]||R.steps[R.steps.length-1];
+  const toMan=Math.max(0,R.steps[sIdx].endCum-pr.cum);
+  $("nIcon").innerHTML=stepIcon(next);
+  $("nDist").textContent=fmtDist(toMan);
+  $("nText").textContent=stepText(next);
+  // 차선
+  const lanes=(next.intersections&&next.intersections[0]&&next.intersections[0].lanes)||[];
+  $("nLanes").innerHTML=lanes.length>1?lanes.map(l=>`<div class="lane ${l.valid?"on":""}">${arrowSvg(ANG[(l.indications||["straight"])[0]]??0,"#fff",26)}</div>`).join(""):"";
+  // 그다음 안내 (가까우면)
+  const after=R.steps[sIdx+2];
+  $("nThen").textContent=(after&&next.maneuver.type!=="arrive"&&(after.startCum-R.steps[sIdx+1].startCum)<250)?`${nt("then")}: ${stepText(after)}`:"";
+  placeInfo();
+  // 남은 시간·거리
+  const secs=R.duration*(remain/(R.total||1));
+  const eta=new Date(Date.now()+secs*1000);
+  $("nEta").textContent=fmtTime(secs);
+  $("nRem").textContent=`${(remain/1000).toFixed(1)} km · ${eta.toLocaleTimeString(lang==="ko"?"ko-KR":"pt-BR",{hour:"2-digit",minute:"2-digit"})}`;
+  // 음성
+  const far=(kmh||0)>70?800:300,key=sIdx+1;
+  if(toMan<=far&&toMan>120&&!nav.said[key+"f"]){nav.said[key+"f"]=1;speak(lang==="ko"?`${sayDist(toMan)} 앞에서 ${stepText(next)}`:`${nt("inX")(sayDist(toMan))} ${stepText(next)}`)}
+  if(toMan<=60&&!nav.said[key+"n"]){nav.said[key+"n"]=1;speak(lang==="ko"?`곧 ${stepText(next)}`:`${nt("now")}, ${stepText(next)}`)}
+  // 지도 카메라
+  if(nmap&&nmarker){
+    const at=pr.d<55?{lat:pr.lat,lon:pr.lon}:pos;
+    nmarker.setLngLat([at.lon,at.lat]).setRotation(pr.brg);
+    nmap.easeTo({center:[at.lon,at.lat],bearing:pr.brg,pitch:60,zoom:toMan<200?17.5:16.5,duration:950,padding:{top:180,bottom:120}});
+  }
+}
+function placeInfo(){
+  const h=document.querySelector(".nb").getBoundingClientRect().bottom;
+  $("nLanes").style.top=(h-4)+"px";
+  const lh=$("nLanes").innerHTML?$("nLanes").getBoundingClientRect().height:0;
+  $("nThen").style.top=(h+lh+6)+"px";
+}
+
+function arrive(){
+  const d=nav.dest,i=nav.i;stopNav();nav={i,dest:d,done:true};
+  $("nArrName").textContent=d.isEnd?t("backHome"):(d.name||d.addr);
+  $("nDoneNext").style.display=d.isEnd?"none":"";
+  $("nArrive").classList.remove("hidden");
+  speak(nt("arrived"));
+}
+
+$("nEnd").onclick=()=>{stopNav();$("nav").classList.add("hidden");render()};
+$("nClose").onclick=()=>{stopNav();nav=null;$("nav").classList.add("hidden");render()};
+$("nVoice").onclick=()=>{voiceOn=!voiceOn;store.set("rc_voice",voiceOn);$("nVoice").textContent=voiceOn?"🔊":"🔇";if(!voiceOn)try{speechSynthesis.cancel()}catch(e){}};
+$("nVoice").textContent=voiceOn?"🔊":"🔇";
+$("nDoneNext").onclick=()=>{
+  const i=nav?nav.i:-1;nav=null;
+  if(i>=0&&trip.stops[i])trip.stops[i].done=true;store.set("rc_trip",trip);
+  const n=trip.stops.findIndex(s=>!s.done);
+  if(n<0){$("nav").classList.add("hidden");render();speak(nt("allDone"));return}
+  startNav(n,false);
+};
+window.addEventListener("resize",()=>{if(nmap)nmap.resize()});
 
 // 입력값 기억
 $("stops").value=store.get("rc_stops","");$("start").value=store.get("rc_start","");
