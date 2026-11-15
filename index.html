@@ -674,7 +674,8 @@ function arLoop(){
   const here=nav.cur;
   // 앞으로 갈 길 5m 간격으로
   const pts=[];
-  for(let d=0;d<=220;d+=5){
+  const ds=[0,1.3,2,3,4];for(let d=5;d<=220;d+=5)ds.push(d);
+  for(const d of ds){
     const cum=nav.cur.cum+d;if(cum>nav.r.total)break;
     const p=pointAt(cum),xy=toXY(p.lat,p.lon,here);
     pts.push({fw:xy[0]*Math.sin(hr)+xy[1]*Math.cos(hr),rt:xy[0]*Math.cos(hr)-xy[1]*Math.sin(hr)});
@@ -687,13 +688,13 @@ function arLoop(){
     const w=1.7;
     L.push({rt:pts[i].rt-dz*w,fw:pts[i].fw+dx*w});Rr.push({rt:pts[i].rt+dz*w,fw:pts[i].fw-dx*w});
   }
-  const proj=q=>{const z=Math.max(q.fw,1.5);return [cx+f*q.rt/z,hy+f*camH/z]};
+  const proj=q=>{const z=Math.max(q.fw,1.0);return [cx+f*q.rt/z,hy+f*camH/z]};
   // 너무 가까운(차 밑) 부분은 자르기
-  const cut=i=>pts[i].fw>2.5;
+  const cut=i=>pts[i].fw>1.2;
   const idx=pts.map((_,i)=>i).filter(cut);
   if(idx.length<2)return;
   const grad=g.createLinearGradient(0,H,0,hy);
-  grad.addColorStop(0,"rgba(239,68,68,.75)");grad.addColorStop(1,"rgba(239,68,68,.15)");
+  grad.addColorStop(0,"rgba(239,68,68,.85)");grad.addColorStop(1,"rgba(239,68,68,.35)");
   g.beginPath();
   idx.forEach((i,k)=>{const s=proj(L[i]);k?g.lineTo(s[0],s[1]):g.moveTo(s[0],s[1])});
   idx.slice().reverse().forEach(i=>{const s=proj(Rr[i]);g.lineTo(s[0],s[1])});
