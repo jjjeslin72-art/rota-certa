@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rota Certa</title>
+<meta name="theme-color" content="#0f766e">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{--c:#0f766e;--c2:#14b8a6;--bg:#f4f6f5;--card:#fff;--tx:#1f2937;--mut:#6b7280;--ok:#16a34a;--warn:#dc2626}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;background:var(--bg);color:var(--tx)}
+  header{background:var(--c);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1000}
+  header h1{margin:0;font-size:20px}
+  header small{display:block;opacity:.85;font-size:12px}
+  .lang button{background:transparent;border:1px solid #fff8;color:#fff;border-radius:8px;padding:6px 10px;font-size:14px}
+  .lang button.on{background:#fff;color:var(--c);font-weight:700}
+  main{max-width:640px;margin:0 auto;padding:12px}
+  .card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
+  label{font-weight:700;font-size:15px;display:block;margin-bottom:6px}
+  .hint{color:var(--mut);font-size:13px;margin:4px 0 8px}
+  input[type=text],textarea{width:100%;font-size:16px;padding:10px;border:1px solid #d1d5db;border-radius:10px;font-family:inherit}
+  textarea{min-height:150px}
+  .row{display:flex;gap:8px;align-items:center}
+  .row input{flex:1}
+  button{font-family:inherit;cursor:pointer}
+  .btn{border:0;border-radius:10px;padding:12px 14px;font-size:16px;font-weight:700}
+  .main-btn{width:100%;background:var(--c);color:#fff;font-size:18px;padding:16px}
+  .main-btn:disabled{opacity:.6}
+  .sub{background:#e6f4f2;color:var(--c)}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:15px}
+  .chk input{width:20px;height:20px}
+  #status{font-size:14px;color:var(--mut);margin-top:8px;white-space:pre-line}
+  #status.err{color:var(--warn)}
+  #map{height:300px;border-radius:14px;margin-bottom:12px}
+  .sum{display:flex;justify-content:space-around;text-align:center}
+  .sum b{display:block;font-size:22px;color:var(--c)}
+  .sum span{font-size:13px;color:var(--mut)}
+  .stop{display:flex;gap:10px;padding:12px 0;border-top:1px solid #eee}
+  .stop:first-child{border-top:0}
+  .num{flex:0 0 34px;height:34px;border-radius:50%;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+  .stop.done .num{background:var(--ok)}
+  .stop.done .info{opacity:.5;text-decoration:line-through}
+  .stop.next{background:#fff7e6;margin:0 -14px;padding:12px 14px;border-radius:10px}
+  .stop.next .num{background:#f59e0b}
+  .info{flex:1;min-width:0}
+  .info .nm{font-weight:700;font-size:16px}
+  .info .ad{font-size:14px;color:var(--mut);word-break:break-word}
+  .info .lg{font-size:13px;color:var(--c);margin-top:2px}
+  .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .acts a,.acts button{font-size:14px;padding:8px 10px;border-radius:8px;text-decoration:none;font-weight:700;border:0}
+  .g{background:#1a73e8;color:#fff}.w{background:#33ccff;color:#05384a}.z{background:#25d366;color:#053}
+  .d{background:#eee;color:#333}.stop.done .d{background:var(--ok);color:#fff}
+  .fail{color:var(--warn);font-size:14px}
+  .links a{display:block;margin-top:8px;text-align:center;background:#1a73e8;color:#fff;padding:12px;border-radius:10px;text-decoration:none;font-weight:700}
+  .hidden{display:none}
+  footer{text-align:center;color:var(--mut);font-size:11px;padding:10px 0 30px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🚚 Rota Certa</h1><small data-t="tag"></small></div>
+  <div class="lang"><button id="lk">한국어</button> <button id="lp">PT</button></div>
+</header>
+
+<main>
+  <section class="card">
+    <label data-t="start"></label>
+    <div class="row">
+      <input type="text" id="start" data-ph="startPh">
+      <button class="btn sub" id="gps">📍</button>
+    </div>
+    <div class="hint" data-t="gpsHint"></div>
+  </section>
+
+  <section class="card">
+    <label data-t="stops"></label>
+    <div class="hint" data-t="stopsHint"></div>
+    <textarea id="stops" data-ph="stopsPh"></textarea>
+    <label class="chk"><input type="checkbox" id="round"> <span data-t="round"></span></label>
+  </section>
+
+  <button class="btn main-btn" id="go" data-t="go"></button>
+  <div id="status"></div>
+
+  <section id="result" class="hidden" style="margin-top:12px">
+    <div class="card sum">
+      <div><b id="sStops">0</b><span data-t="sStops"></span></div>
+      <div><b id="sKm">0</b><span>km</span></div>
+      <div><b id="sTime">0</b><span data-t="sTime"></span></div>
+    </div>
+    <div id="map"></div>
+    <div class="card"><div id="list"></div></div>
+    <div class="card links">
+      <label data-t="allRoute"></label>
+      <div class="hint" data-t="allHint"></div>
+      <div id="chunks"></div>
+    </div>
+    <button class="btn sub" style="width:100%" id="reset" data-t="reset"></button>
+  </section>
+  <footer>Mapa © OpenStreetMap · Rotas: OSRM</footer>
+</main>
+
+<script>
+const T={
+ ko:{tag:"여러 곳 배송, 가장 빠른 순서로",start:"출발지",startPh:"예: Rua José Paulino, 500, São Paulo",gpsHint:"📍 버튼을 누르면 지금 있는 곳이 출발지가 돼요",
+  stops:"배송할 곳",stopsHint:"한 줄에 한 곳씩 써 주세요. 이름과 전화번호는 | 로 나눠서 넣을 수 있어요.\n예: Rua Augusta, 1500, São Paulo | 마리아 | 11 98765-4321",
+  stopsPh:"Rua Augusta, 1500, São Paulo | Maria | 11 98765-4321\nAv. Paulista, 1000, São Paulo",round:"마지막에 출발지로 돌아오기",
+  go:"🧭 가장 빠른 순서 만들기",sStops:"곳",sTime:"예상 시간",allRoute:"전체 경로 한 번에 열기",allHint:"구글지도는 한 번에 10곳까지만 돼서 나눠서 열어요",
+  reset:"새 경로 만들기",nav:"구글지도",waze:"Waze",wa:"왓츠앱",done:"완료",undo:"완료 취소",part:"구간",
+  finding:"주소 찾는 중",routing:"가장 빠른 순서 계산 중...",notFound:"이 주소는 못 찾았어요 (빼고 계산했어요):",
+  needStart:"출발지를 넣어 주세요",needStops:"배송할 곳을 1곳 이상 넣어 주세요",startFail:"출발지 주소를 못 찾았어요. 동네 이름이나 도시를 같이 써 보세요",
+  netErr:"인터넷 연결이나 지도 서버에 문제가 있어요. 잠시 후 다시 해 주세요",gpsFail:"위치를 가져오지 못했어요. 주소를 직접 써 주세요",
+  myLoc:"내 현재 위치",backHome:"출발지로 돌아오기",min:"분",h:"시간",
+  allDone:"🎉 오늘 배송 끝! 수고하셨어요"},
+ pt:{tag:"Várias entregas, na ordem mais rápida",start:"Ponto de partida",startPh:"Ex: Rua José Paulino, 500, São Paulo",gpsHint:"Toque em 📍 para usar sua localização atual",
+  stops:"Entregas",stopsHint:"Um endereço por linha. Nome e telefone podem vir depois de |\nEx: Rua Augusta, 1500, São Paulo | Maria | 11 98765-4321",
+  stopsPh:"Rua Augusta, 1500, São Paulo | Maria | 11 98765-4321\nAv. Paulista, 1000, São Paulo",round:"Voltar ao ponto de partida no final",
+  go:"🧭 Criar a rota mais rápida",sStops:"entregas",sTime:"tempo estimado",allRoute:"Abrir a rota completa",allHint:"O Google Maps aceita até 10 paradas por vez, por isso dividimos",
+  reset:"Nova rota",nav:"Google Maps",waze:"Waze",wa:"WhatsApp",done:"Entregue",undo:"Desfazer",part:"Parte",
+  finding:"Buscando endereços",routing:"Calculando a ordem mais rápida...",notFound:"Não encontramos estes endereços (ficaram fora da rota):",
+  needStart:"Informe o ponto de partida",needStops:"Informe pelo menos 1 entrega",startFail:"Não encontramos o ponto de partida. Tente incluir bairro ou cidade",
+  netErr:"Problema de conexão ou no servidor de mapas. Tente de novo em instantes",gpsFail:"Não foi possível obter a localização. Digite o endereço",
+  myLoc:"Minha localização",backHome:"Voltar ao início",min:"min",h:"h",
+  allDone:"🎉 Todas as entregas feitas! Bom trabalho"}
+};
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let lang=store.get("rc_lang","ko");
+const $=id=>document.getElementById(id);
+const t=k=>T[lang][k];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function applyLang(){
+  document.querySelectorAll("[data-t]").forEach(e=>e.textContent=t(e.dataset.t));
+  document.querySelectorAll("[data-ph]").forEach(e=>e.placeholder=t(e.dataset.ph));
+  $("lk").classList.toggle("on",lang==="ko");$("lp").classList.toggle("on",lang==="pt");
+  document.documentElement.lang=lang==="ko"?"ko":"pt-BR";
+  if(trip)render();
+}
+$("lk").onclick=()=>{lang="ko";store.set("rc_lang",lang);applyLang()};
+$("lp").onclick=()=>{lang="pt";store.set("rc_lang",lang);applyLang()};
+
+function status(msg,err){const s=$("status");s.textContent=msg||"";s.className=err?"err":""}
+
+// ---- 위치 ----
+let startCoord=null; // GPS로 잡은 출발지
+$("gps").onclick=()=>{
+  if(!navigator.geolocation){status(t("gpsFail"),1);return}
+  navigator.geolocation.getCurrentPosition(p=>{
+    startCoord={lat:p.coords.latitude,lon:p.coords.longitude};
+    $("start").value=t("myLoc");status("");
+  },()=>status(t("gpsFail"),1),{enableHighAccuracy:true,timeout:15000});
+};
+$("start").addEventListener("input",()=>{startCoord=null});
+
+// ---- 주소 → 좌표 (OpenStreetMap Nominatim, 1초에 1번 규칙) ----
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const geoCache=store.get("rc_geo",{});
+let lastGeo=0;
+async function geocode(q){
+  const key=q.trim().toLowerCase();
+  if(geoCache[key])return geoCache[key];
+  const wait=1100-(Date.now()-lastGeo); if(wait>0)await sleep(wait);
+  lastGeo=Date.now();
+  const url="https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&accept-language=pt-BR&q="+encodeURIComponent(q);
+  const r=await fetch(url,{headers:{"Accept":"application/json"}});
+  if(!r.ok)throw new Error("geo");
+  const j=await r.json();
+  if(!j.length)return null;
+  const v={lat:+j[0].lat,lon:+j[0].lon};
+  geoCache[key]=v;store.set("rc_geo",geoCache);
+  return v;
+}
+
+function parseLine(line){
+  const [addr,name,phone]=line.split("|").map(s=>(s||"").trim());
+  return {addr,name,phone};
+}
+function waNumber(p){
+  let d=(p||"").replace(/\D/g,"");
+  if(!d)return "";
+  if(d.length<=11)d="55"+d;
+  return d;
+}
+
+// ---- 최적 순서 (OSRM) ----
+const OSRM="https://router.project-osrm.org";
+const cs=pts=>pts.map(p=>p.lon.toFixed(6)+","+p.lat.toFixed(6)).join(";");
+
+let trip=store.get("rc_trip",null);
+let map,layer;
+
+$("go").onclick=async()=>{
+  const startTxt=$("start").value.trim();
+  const lines=$("stops").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  if(!startTxt){status(t("needStart"),1);return}
+  if(!lines.length){status(t("needStops"),1);return}
+  $("go").disabled=true;
+  try{
+    let start=startCoord;
+    if(!start&&(startTxt===T.ko.myLoc||startTxt===T.pt.myLoc)){status(t("gpsHint"),1);return}
+    if(!start){status(t("finding")+"...");start=await geocode(startTxt);
+      if(!start&&!/s[ãa]o paulo|\bsp\b/i.test(startTxt))start=await geocode(startTxt+", São Paulo, SP");if(!start){status(t("startFail"),1);return}}
+    const stops=[],fails=[];
+    for(let i=0;i<lines.length;i++){
+      status(`${t("finding")} ${i+1}/${lines.length}...`);
+      const s=parseLine(lines[i]);
+      let c=await geocode(s.addr);
+      if(!c&&!/s[ãa]o paulo|\bsp\b/i.test(s.addr))c=await geocode(s.addr+", São Paulo, SP");
+      if(c)stops.push({...s,...c});else fails.push(s.addr);
+    }
+    if(!stops.length){status(t("notFound")+"\n"+fails.join("\n"),1);return}
+    status(t("routing"));
+    const round=$("round").checked;
+    const all=[{addr:startTxt,lat:start.lat,lon:start.lon,isStart:true},...stops];
+    // 1) 순서 정하기
+    let order=all.map((_,i)=>i);
+    if(all.length>2){
+      const r=await fetch(`${OSRM}/trip/v1/driving/${cs(all)}?source=first&roundtrip=true&overview=false`);
+      const j=await r.json(); if(j.code!=="Ok")throw new Error("trip");
+      order=j.waypoints.map((w,i)=>({i,pos:w.waypoint_index})).sort((a,b)=>a.pos-b.pos).map(x=>x.i);
+      if(!round){ // 돌아오지 않을 때: 한 바퀴 순서에서 가는 방향을 더 짧은 쪽으로
+        const rev=[order[0],...order.slice(1).reverse()];
+        order=await shorter(all,order,rev);
+      }
+    }
+    let seq=order.map(i=>all[i]);
+    if(round)seq=[...seq,{...all[0],isEnd:true}];
+    // 2) 실제 도로 경로
+    const r2=await fetch(`${OSRM}/route/v1/driving/${cs(seq)}?overview=full&geometries=geojson`);
+    const j2=await r2.json(); if(j2.code!=="Ok")throw new Error("route");
+    const rt=j2.routes[0];
+    trip={start:seq[0],stops:seq.slice(1).map((s,k)=>({...s,dist:rt.legs[k].distance,dur:rt.legs[k].duration,done:false})),
+      dist:rt.distance,dur:rt.duration,line:rt.geometry.coordinates,fails};
+    store.set("rc_trip",trip);
+    status(fails.length?t("notFound")+"\n"+fails.join("\n"):"",fails.length>0);
+    render();
+    $("result").scrollIntoView({behavior:"smooth"});
+  }catch(e){console.error(e);status(t("netErr"),1)}
+  finally{$("go").disabled=false}
+};
+
+async function shorter(all,a,b){
+  try{
+    const [r1,r2]=await Promise.all([a,b].map(o=>fetch(`${OSRM}/route/v1/driving/${cs(o.map(i=>all[i]))}?overview=false`).then(r=>r.json())));
+    return r2.routes[0].duration<r1.routes[0].duration?b:a;
+  }catch(e){return a}
+}
+
+// ---- 화면 ----
+function fmtTime(s){const m=Math.round(s/60);if(m<60)return m+" "+t("min");return Math.floor(m/60)+t("h")+" "+(m%60)+t("min")}
+const gUrl=s=>`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lon}&travelmode=driving`;
+const wUrl=s=>`https://waze.com/ul?ll=${s.lat},${s.lon}&navigate=yes`;
+
+function render(){
+  if(!trip)return;
+  $("result").classList.remove("hidden");
+  const real=trip.stops.filter(s=>!s.isEnd);
+  $("sStops").textContent=real.length;
+  $("sKm").textContent=(trip.dist/1000).toFixed(1);
+  $("sTime").textContent=fmtTime(trip.dur);
+  const nextIdx=trip.stops.findIndex(s=>!s.done);
+  let html="";
+  trip.stops.forEach((s,i)=>{
+    const cls=["stop",s.done?"done":"",i===nextIdx?"next":""].join(" ");
+    const nm=s.isEnd?"🏠 "+t("backHome"):esc(s.name||s.addr);
+    const wa=waNumber(s.phone);
+    html+=`<div class="${cls}"><div class="num">${s.isEnd?"🏠":i+1}</div><div class="info">
+      <div class="nm">${nm}</div>${(s.name&&!s.isEnd)?`<div class="ad">${esc(s.addr)}</div>`:""}
+      ${s.phone?`<div class="ad">📞 ${esc(s.phone)}</div>`:""}
+      <div class="lg">+ ${(s.dist/1000).toFixed(1)} km · ${fmtTime(s.dur)}</div>
+      <div class="acts"><a class="g" href="${gUrl(s)}" target="_blank" rel="noopener">${t("nav")}</a>
+      <a class="w" href="${wUrl(s)}" target="_blank" rel="noopener">${t("waze")}</a>
+      ${wa?`<a class="z" href="https://wa.me/${wa}" target="_blank" rel="noopener">${t("wa")}</a>`:""}
+      <button class="d" data-i="${i}">${s.done?t("undo"):"✓ "+t("done")}</button></div></div></div>`;
+  });
+  if(nextIdx===-1)html=`<div style="text-align:center;font-weight:700;padding:10px;color:var(--ok)">${t("allDone")}</div>`+html;
+  $("list").innerHTML=html;
+  $("list").querySelectorAll("button.d").forEach(b=>b.onclick=()=>{const s=trip.stops[+b.dataset.i];s.done=!s.done;store.set("rc_trip",trip);render()});
+  // 10곳씩 나눠서 구글지도 링크
+  const pts=[trip.start,...trip.stops];let ch="",k=1;
+  for(let i=0;i<pts.length-1;i+=10){
+    const part=pts.slice(i,i+11),o=part[0],d=part[part.length-1],w=part.slice(1,-1);
+    let u=`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lon}&destination=${d.lat},${d.lon}&travelmode=driving`;
+    if(w.length)u+="&waypoints="+encodeURIComponent(w.map(p=>p.lat+","+p.lon).join("|"));
+    const a=i+1,b=Math.min(i+10,pts.length-1);
+    ch+=`<a href="${u}" target="_blank" rel="noopener">${t("part")} ${k++}: ${a} → ${b}</a>`;
+  }
+  $("chunks").innerHTML=ch;
+  drawMap(nextIdx);
+}
+
+function drawMap(nextIdx){
+  if(typeof L==="undefined")return;
+  if(!map){map=L.map("map");L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map)}
+  if(layer)layer.remove();
+  layer=L.layerGroup().addTo(map);
+  const line=L.polyline(trip.line.map(c=>[c[1],c[0]]),{color:"#0f766e",weight:5,opacity:.8}).addTo(layer);
+  const pin=(txt,bg)=>L.divIcon({className:"",html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;border:2px solid #fff;box-shadow:0 1px 4px #0006">${txt}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+  L.marker([trip.start.lat,trip.start.lon],{icon:pin("S","#111")}).addTo(layer);
+  trip.stops.forEach((s,i)=>{if(s.isEnd)return;
+    const bg=s.done?"#16a34a":(i===nextIdx?"#f59e0b":"#0f766e");
+    L.marker([s.lat,s.lon],{icon:pin(i+1,bg)}).bindPopup(esc(s.name||s.addr)).addTo(layer)});
+  map.fitBounds(line.getBounds(),{padding:[20,20]});
+  setTimeout(()=>map.invalidateSize(),200);
+}
+
+$("reset").onclick=()=>{trip=null;store.set("rc_trip",null);$("result").classList.add("hidden");status("");window.scrollTo({top:0,behavior:"smooth"})};
+
+// 입력값 기억
+$("stops").value=store.get("rc_stops","");$("start").value=store.get("rc_start","");
+$("stops").addEventListener("input",e=>store.set("rc_stops",e.target.value));
+$("start").addEventListener("input",e=>store.set("rc_start",e.target.value));
+applyLang();
+if(trip)render();
+</script>
+</body>
+</html>
