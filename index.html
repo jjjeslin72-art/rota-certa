@@ -569,7 +569,7 @@ function onPos(pos,kmh){
   const R=nav.r,remain=Math.max(0,R.total-pr.cum);
   // 도착
   if(remain<35){arrive();return}
-  const sIdx=R.pts[pr.i].step,next=R.steps[sIdx+1]||R.steps[R.steps.length-1];
+  const sIdx=R.pts[Math.min(pr.i+1,R.pts.length-1)].step,next=R.steps[sIdx+1]||R.steps[R.steps.length-1];
   const toMan=Math.max(0,R.steps[sIdx].endCum-pr.cum);
   $("nIcon").innerHTML=stepIcon(next);
   $("nDist").textContent=fmtDist(toMan);
