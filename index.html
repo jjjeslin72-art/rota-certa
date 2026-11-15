@@ -101,6 +101,8 @@
   .hz{position:absolute;right:12px;z-index:3;display:none;flex-direction:column;gap:6px;top:45%}
   #nav.ar .hz{display:flex}
   .hz button{width:44px;height:44px;border-radius:50%;border:0;background:#fffc;font-size:20px}
+  .gobtn{position:absolute;left:50%;transform:translateX(-50%);bottom:200px;z-index:4;border:0;border-radius:30px;padding:16px 40px;font-size:22px;font-weight:800;background:#16a34a;color:#fff;box-shadow:0 4px 14px #0005}
+  .maplibregl-ctrl-attrib.maplibregl-compact{font-size:10px}
 </style>
 </head>
 <body>
@@ -159,6 +161,7 @@
   <div class="nthen" id="nThen"></div>
   <div class="spd"><b id="nSpd">0</b><span>km/h</span></div>
   <div class="nmsg" id="nMsg"></div>
+  <button class="gobtn hidden" id="nGo"></button>
   <div class="nbot">
     <button id="nEnd" aria-label="end">✕</button>
     <div class="eta"><b id="nEta">--</b><span id="nRem"></span></div>
@@ -472,7 +475,7 @@ function pointAt(cum){
 }
 
 function speak(txt){
-  if(!voiceOn||!("speechSynthesis" in window))return;
+  if(!voiceOn||!("speechSynthesis" in window)||(nav&&!nav.started&&!nav.done))return;
   try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.lang=lang==="ko"?"ko-KR":"pt-BR";speechSynthesis.speak(u)}catch(e){}
 }
 
@@ -482,6 +485,7 @@ function initNavMap(center){
   try{
     nmap=new maplibregl.Map({container:"navmap",style:"https://tiles.openfreemap.org/styles/liberty",center:[center.lon,center.lat],zoom:16.5,pitch:60,attributionControl:{compact:true}});
     nmap.on("load",()=>{
+      document.querySelectorAll(".maplibregl-ctrl-attrib").forEach(e=>e.classList.remove("maplibregl-compact-show"));
       nmap.addSource("route",{type:"geojson",data:{type:"Feature",geometry:{type:"LineString",coordinates:nav?nav.r.line:[]}}});
       nmap.addLayer({id:"route-case",type:"line",source:"route",layout:{"line-join":"round","line-cap":"round"},paint:{"line-color":"#1e3a8a","line-width":13}});
       nmap.addLayer({id:"route-line",type:"line",source:"route",layout:{"line-join":"round","line-cap":"round"},paint:{"line-color":"#3b82f6","line-width":8}});
@@ -517,8 +521,13 @@ async function startNav(i,sim){
   initNavMap(origin);setRouteOnMap();
   try{if("wakeLock" in navigator)wakeLock=await navigator.wakeLock.request("screen")}catch(e){}
   if(arWant&&!arOn)$("arBtn").onclick();
+  nav.started=false;$("nGo").textContent=nt("go");$("nGo").classList.remove("hidden");
+  $("nGo").onclick=()=>{
+    if(!nav)return;nav.started=true;$("nGo").classList.add("hidden");
+    try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(nt("startSay"));u.lang=lang==="ko"?"ko-KR":"pt-BR";if(voiceOn)speechSynthesis.speak(u)}catch(e){}
+    if(nav.sim)nav.timer=setInterval(()=>{nav.simCum+=14;const p=pointAt(nav.simCum);onPos(p,50)},1000);
+  };
   if(sim){
-    nav.timer=setInterval(()=>{nav.simCum+=14;const p=pointAt(nav.simCum);onPos(p,50)},1000);
     onPos(origin,0);
   }else{
     nav.watch=navigator.geolocation.watchPosition(p=>onPos({lat:p.coords.latitude,lon:p.coords.longitude},p.coords.speed!=null?p.coords.speed*3.6:null),
@@ -528,6 +537,7 @@ async function startNav(i,sim){
 }
 
 function stopNav(){
+  $("nGo").classList.add("hidden");
   if(typeof arStop==="function"&&arOn)arStop();
   if(!nav)return;
   if(nav.timer)clearInterval(nav.timer);
@@ -611,11 +621,12 @@ $("nDoneNext").onclick=()=>{
   if(i>=0&&trip.stops[i])trip.stops[i].done=true;store.set("rc_trip",trip);
   const n=trip.stops.findIndex(s=>!s.done);
   if(n<0){$("nav").classList.add("hidden");render();speak(nt("allDone"));return}
-  startNav(n,false);
+  startNav(n,false).then(()=>{if(nav&&!nav.started)$("nGo").onclick()});
 };
 window.addEventListener("resize",()=>{if(nmap)nmap.resize()});
 
 // ===================== 실제 도로 화면 (카메라 AR) =====================
+Object.assign(NT.ko,{go:"▶ 출발",startSay:"안내를 시작합니다"});Object.assign(NT.pt,{go:"▶ Iniciar",startSay:"Iniciando a navegação"});
 Object.assign(NT.ko,{arOn:"📷 실제 도로",arOff:"🗺️ 지도만",camFail:"카메라를 켤 수 없어요. 카메라 허용을 눌러 주세요",arTip:"폰을 거치대에 세워 앞 도로를 비춰 주세요. ▲▼로 빨간 길을 도로에 맞추세요"});
 Object.assign(NT.pt,{arOn:"📷 Visão real",arOff:"🗺️ Só mapa",camFail:"Não foi possível abrir a câmera. Permita o acesso à câmera",arTip:"Prenda o celular no suporte apontando para a rua. Ajuste com ▲▼"});
 let arWant=false,arOn=false,arStream=null,arRaf=0,horizon=store.get("rc_hz",0.45),arHeading=null;
