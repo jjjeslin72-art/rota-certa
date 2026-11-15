@@ -156,21 +156,27 @@ $("start").addEventListener("input",()=>{startCoord=null});
 
 // ---- 주소 → 좌표 (OpenStreetMap Nominatim, 1초에 1번 규칙) ----
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const geoCache=store.get("rc_geo",{});
+const geoCache=store.get("rc_geo2",{});
 let lastGeo=0;
-async function geocode(q){
-  const key=q.trim().toLowerCase();
+const SP={lat:-23.55,lon:-46.63}; // 기본 기준점: 상파울루
+async function geoOnce(q,near){
+  const key=q.trim().toLowerCase()+(near?"@"+near.lat.toFixed(1)+","+near.lon.toFixed(1):"");
   if(geoCache[key])return geoCache[key];
   const wait=1100-(Date.now()-lastGeo); if(wait>0)await sleep(wait);
   lastGeo=Date.now();
-  const url="https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&accept-language=pt-BR&q="+encodeURIComponent(q);
+  let url="https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&accept-language=pt-BR&q="+encodeURIComponent(q);
+  if(near){const d=0.6;url+=`&bounded=1&viewbox=${near.lon-d},${near.lat+d},${near.lon+d},${near.lat-d}`}
   const r=await fetch(url,{headers:{"Accept":"application/json"}});
   if(!r.ok)throw new Error("geo");
   const j=await r.json();
   if(!j.length)return null;
-  const v={lat:+j[0].lat,lon:+j[0].lon};
-  geoCache[key]=v;store.set("rc_geo",geoCache);
+  const v={lat:+j[0].lat,lon:+j[0].lon,found:j[0].display_name};
+  geoCache[key]=v;store.set("rc_geo2",geoCache);
   return v;
+}
+// 가까운 곳(약 60km 안)에서 먼저 찾고, 없으면 브라질 전체에서 찾기
+async function geocode(q,near){
+  return (await geoOnce(q,near||SP))||(await geoOnce(q,null));
 }
 
 function parseLine(line){
@@ -200,14 +206,12 @@ $("go").onclick=async()=>{
   try{
     let start=startCoord;
     if(!start&&(startTxt===T.ko.myLoc||startTxt===T.pt.myLoc)){status(t("gpsHint"),1);return}
-    if(!start){status(t("finding")+"...");start=await geocode(startTxt);
-      if(!start&&!/s[ãa]o paulo|\bsp\b/i.test(startTxt))start=await geocode(startTxt+", São Paulo, SP");if(!start){status(t("startFail"),1);return}}
+    if(!start){status(t("finding")+"...");start=await geocode(startTxt);if(!start){status(t("startFail"),1);return}}
     const stops=[],fails=[];
     for(let i=0;i<lines.length;i++){
       status(`${t("finding")} ${i+1}/${lines.length}...`);
       const s=parseLine(lines[i]);
-      let c=await geocode(s.addr);
-      if(!c&&!/s[ãa]o paulo|\bsp\b/i.test(s.addr))c=await geocode(s.addr+", São Paulo, SP");
+      const c=await geocode(s.addr,start);
       if(c)stops.push({...s,...c});else fails.push(s.addr);
     }
     if(!stops.length){status(t("notFound")+"\n"+fails.join("\n"),1);return}
@@ -268,6 +272,7 @@ function render(){
     const wa=waNumber(s.phone);
     html+=`<div class="${cls}"><div class="num">${s.isEnd?"🏠":i+1}</div><div class="info">
       <div class="nm">${nm}</div>${(s.name&&!s.isEnd)?`<div class="ad">${esc(s.addr)}</div>`:""}
+      ${(s.found&&!s.isEnd)?`<div class="ad">📍 ${esc(s.found.split(",").slice(0,4).join(","))}</div>`:""}
       ${s.phone?`<div class="ad">📞 ${esc(s.phone)}</div>`:""}
       <div class="lg">+ ${(s.dist/1000).toFixed(1)} km · ${fmtTime(s.dur)}</div>
       <div class="acts"><a class="g" href="${gUrl(s)}" target="_blank" rel="noopener">${t("nav")}</a>
