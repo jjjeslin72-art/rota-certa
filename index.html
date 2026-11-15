@@ -90,6 +90,17 @@
   .nomap #navmap{display:none}
   .n{background:#0f766e;color:#fff}
   .navbtns{display:flex;flex-direction:column;gap:8px}
+  /* ---- 실제 도로(카메라) 모드 ---- */
+  #arVideo,#arCanvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+  #nav.ar #arVideo,#nav.ar #arCanvas{display:block}
+  #nav.ar{background:#000}
+  #nav.ar #navmap{inset:auto;left:10px;bottom:100px;width:44%;height:30%;border-radius:14px;overflow:hidden;border:3px solid #fff;box-shadow:0 2px 10px #0006;z-index:1}
+  #nav.ar .spd{left:auto;right:12px}
+  .arbtn{position:absolute;right:12px;bottom:110px;z-index:3;border:0;border-radius:24px;padding:10px 14px;font-size:16px;font-weight:800;background:#fff;box-shadow:0 2px 8px #0004}
+  #nav.ar .arbtn{bottom:196px;background:#ef4444;color:#fff}
+  .hz{position:absolute;right:12px;z-index:3;display:none;flex-direction:column;gap:6px;top:45%}
+  #nav.ar .hz{display:flex}
+  .hz button{width:44px;height:44px;border-radius:50%;border:0;background:#fffc;font-size:20px}
 </style>
 </head>
 <body>
@@ -138,7 +149,11 @@
 </main>
 
 <div id="nav" class="hidden">
+  <video id="arVideo" playsinline muted autoplay></video>
+  <canvas id="arCanvas"></canvas>
   <div id="navmap"></div>
+  <button class="arbtn" id="arBtn"></button>
+  <div class="hz"><button id="hzUp">▲</button><button id="hzDn">▼</button></div>
   <div class="nb"><div class="nb-ic" id="nIcon"></div><div style="min-width:0"><div class="nb-d" id="nDist"></div><div class="nb-t" id="nText"></div></div></div>
   <div class="lanes" id="nLanes"></div>
   <div class="nthen" id="nThen"></div>
@@ -501,6 +516,7 @@ async function startNav(i,sim){
   $("nMsg").textContent=sim?nt("simOn"):"";
   initNavMap(origin);setRouteOnMap();
   try{if("wakeLock" in navigator)wakeLock=await navigator.wakeLock.request("screen")}catch(e){}
+  if(arWant&&!arOn)$("arBtn").onclick();
   if(sim){
     nav.timer=setInterval(()=>{nav.simCum+=14;const p=pointAt(nav.simCum);onPos(p,50)},1000);
     onPos(origin,0);
@@ -512,6 +528,7 @@ async function startNav(i,sim){
 }
 
 function stopNav(){
+  if(typeof arStop==="function"&&arOn)arStop();
   if(!nav)return;
   if(nav.timer)clearInterval(nav.timer);
   if(nav.watch!=null)navigator.geolocation.clearWatch(nav.watch);
@@ -537,6 +554,8 @@ function onPos(pos,kmh){
   if(!nav.sim&&$("nMsg").textContent===nt("noGps"))$("nMsg").textContent="";
   // 경로 이탈 → 다시 찾기
   if(!nav.sim&&pr.d>55){if(++nav.off>=3){reroute(pos);}}else nav.off=0;
+  nav.cur={lat:pr.d<55?pr.lat:pos.lat,lon:pr.d<55?pr.lon:pos.lon,cum:pr.cum};
+  updateHeading(pos,pr.brg);
   const R=nav.r,remain=Math.max(0,R.total-pr.cum);
   // 도착
   if(remain<35){arrive();return}
@@ -595,6 +614,89 @@ $("nDoneNext").onclick=()=>{
   startNav(n,false);
 };
 window.addEventListener("resize",()=>{if(nmap)nmap.resize()});
+
+// ===================== 실제 도로 화면 (카메라 AR) =====================
+Object.assign(NT.ko,{arOn:"📷 실제 도로",arOff:"🗺️ 지도만",camFail:"카메라를 켤 수 없어요. 카메라 허용을 눌러 주세요",arTip:"폰을 거치대에 세워 앞 도로를 비춰 주세요. ▲▼로 빨간 길을 도로에 맞추세요"});
+Object.assign(NT.pt,{arOn:"📷 Visão real",arOff:"🗺️ Só mapa",camFail:"Não foi possível abrir a câmera. Permita o acesso à câmera",arTip:"Prenda o celular no suporte apontando para a rua. Ajuste com ▲▼"});
+let arWant=false,arOn=false,arStream=null,arRaf=0,horizon=store.get("rc_hz",0.45),arHeading=null;
+function arLabel(){$("arBtn").textContent=arOn?nt("arOff"):nt("arOn")}
+arLabel();
+$("arBtn").onclick=async()=>{
+  if(arOn){arWant=false;arStop();return}
+  arWant=true;
+  try{
+    arStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});
+    $("arVideo").srcObject=arStream;await $("arVideo").play().catch(()=>{});
+    arOn=true;$("nav").classList.add("ar");arLabel();
+    $("nMsg").textContent=nt("arTip");setTimeout(()=>{if($("nMsg").textContent===nt("arTip"))$("nMsg").textContent=""},6000);
+    setTimeout(()=>{if(nmap)nmap.resize()},100);
+    arLoop();
+  }catch(e){console.error(e);$("nMsg").textContent=nt("camFail")}
+};
+function arStop(){
+  arOn=false;cancelAnimationFrame(arRaf);
+  if(arStream)arStream.getTracks().forEach(t=>t.stop());arStream=null;
+  $("nav").classList.remove("ar");arLabel();setTimeout(()=>{if(nmap)nmap.resize()},100);
+}
+$("hzUp").onclick=()=>{horizon=Math.max(.2,horizon-.03);store.set("rc_hz",horizon)};
+$("hzDn").onclick=()=>{horizon=Math.min(.75,horizon+.03);store.set("rc_hz",horizon)};
+
+// 진행 방향 (GPS로 움직인 방향, 부드럽게)
+function updateHeading(pos,routeBrg){
+  if(nav&&nav.sim){arHeading=routeBrg;return}
+  if(nav.hPrev&&hav(nav.hPrev,pos)>4){
+    const b=bearingOf(nav.hPrev,pos);
+    if(arHeading==null)arHeading=b;else{let d=((b-arHeading+540)%360)-180;arHeading=(arHeading+d*0.5+360)%360}
+    nav.hPrev=pos;
+  }else if(!nav.hPrev){nav.hPrev=pos}
+  if(arHeading==null)arHeading=routeBrg;
+}
+
+function arLoop(){
+  if(!arOn)return;
+  arRaf=requestAnimationFrame(arLoop);
+  const cv=$("arCanvas"),W=cv.clientWidth,H=cv.clientHeight,dpr=window.devicePixelRatio||1;
+  if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr}
+  const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+  if(!nav||!nav.r||!nav.cur||arHeading==null)return;
+  const f=(W/2)/Math.tan(30*Math.PI/180),camH=1.3,hy=H*horizon,cx=W/2,hr=arHeading*Math.PI/180;
+  const here=nav.cur;
+  // 앞으로 갈 길 5m 간격으로
+  const pts=[];
+  for(let d=0;d<=220;d+=5){
+    const cum=nav.cur.cum+d;if(cum>nav.r.total)break;
+    const p=pointAt(cum),xy=toXY(p.lat,p.lon,here);
+    pts.push({fw:xy[0]*Math.sin(hr)+xy[1]*Math.cos(hr),rt:xy[0]*Math.cos(hr)-xy[1]*Math.sin(hr)});
+  }
+  if(pts.length<2)return;
+  const L=[],Rr=[];
+  for(let i=0;i<pts.length;i++){
+    const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)];
+    let dx=b.rt-a.rt,dz=b.fw-a.fw,n=Math.hypot(dx,dz)||1;dx/=n;dz/=n;
+    const w=1.7;
+    L.push({rt:pts[i].rt-dz*w,fw:pts[i].fw+dx*w});Rr.push({rt:pts[i].rt+dz*w,fw:pts[i].fw-dx*w});
+  }
+  const proj=q=>{const z=Math.max(q.fw,1.5);return [cx+f*q.rt/z,hy+f*camH/z]};
+  // 너무 가까운(차 밑) 부분은 자르기
+  const cut=i=>pts[i].fw>2.5;
+  const idx=pts.map((_,i)=>i).filter(cut);
+  if(idx.length<2)return;
+  const grad=g.createLinearGradient(0,H,0,hy);
+  grad.addColorStop(0,"rgba(239,68,68,.75)");grad.addColorStop(1,"rgba(239,68,68,.15)");
+  g.beginPath();
+  idx.forEach((i,k)=>{const s=proj(L[i]);k?g.lineTo(s[0],s[1]):g.moveTo(s[0],s[1])});
+  idx.slice().reverse().forEach(i=>{const s=proj(Rr[i]);g.lineTo(s[0],s[1])});
+  g.closePath();g.fillStyle=grad;g.fill();
+  g.lineWidth=3;g.strokeStyle="rgba(255,255,255,.7)";g.stroke();
+  // 길 위 화살표(쉐브론)
+  g.fillStyle="rgba(255,255,255,.9)";
+  for(let k=2;k<idx.length;k+=4){
+    const i=idx[k],c=proj(pts[i]),a=proj(pts[Math.max(0,i-1)]);
+    const z=Math.max(pts[i].fw,1.5),s=f*0.9/z,ang=Math.atan2(c[1]-a[1],c[0]-a[0])+Math.PI/2;
+    g.save();g.translate(c[0],c[1]);g.rotate(ang);g.beginPath();g.moveTo(0,-s);g.lineTo(s*.9,0);g.lineTo(s*.45,0);g.lineTo(0,-s*.5);g.lineTo(-s*.45,0);g.lineTo(-s*.9,0);g.closePath();g.globalAlpha=Math.min(1,1.2-k/idx.length);g.fill();g.restore();
+  }
+  g.globalAlpha=1;
+}
 
 // 입력값 기억
 $("stops").value=store.get("rc_stops","");$("start").value=store.get("rc_start","");
