@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rota Certa</title>
 <meta name="theme-color" content="#0f766e">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
@@ -103,6 +101,12 @@
   .hz button{width:44px;height:44px;border-radius:50%;border:0;background:#fffc;font-size:20px}
   .gobtn{position:absolute;left:50%;transform:translateX(-50%);bottom:200px;z-index:4;border:0;border-radius:30px;padding:16px 40px;font-size:22px;font-weight:800;background:#16a34a;color:#fff;box-shadow:0 4px 14px #0005}
   .maplibregl-ctrl-attrib.maplibregl-compact{font-size:10px}
+  #info{position:fixed;inset:0;background:#0008;z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px}
+  #info .box{background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:18px}
+  #info h2{margin:0 0 8px;font-size:20px}#info h3{margin:14px 0 4px;font-size:16px;color:var(--c)}
+  #info p,#info li{font-size:14px;line-height:1.5;color:#333}#info ul{padding-left:18px;margin:4px 0}
+  #info button{width:100%;margin-top:14px}
+  footer a{color:var(--mut)}
 </style>
 </head>
 <body>
@@ -147,9 +151,18 @@
     </div>
     <button class="btn sub" style="width:100%" id="reset" data-t="reset"></button>
   </section>
-  <footer>Mapa © OpenStreetMap · Rotas: OSRM</footer>
+  <footer>Mapa: OpenFreeMap © OpenMapTiles · Dados © colaboradores do <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Endereços: Nominatim · Rotas: OSRM<br>
+    <a href="#" id="openInfo" data-t="infoLink"></a> · <span data-t="testVer"></span></footer>
 </main>
 
+<div id="info" class="hidden"><div class="box">
+  <h2 data-t="infoTitle"></h2>
+  <h3 data-t="safeH"></h3><ul><li data-t="safe1"></li><li data-t="safe2"></li><li data-t="safe3"></li></ul>
+  <h3 data-t="privH"></h3><ul><li data-t="priv1"></li><li data-t="priv2"></li><li data-t="priv3"></li><li data-t="priv4"></li></ul>
+  <h3 data-t="srcH"></h3><p data-t="src1"></p>
+  <h3 data-t="testH"></h3><p data-t="test1"></p>
+  <button class="btn main-btn" id="infoOk" data-t="infoOk"></button>
+</div></div>
 <div id="nav" class="hidden">
   <video id="arVideo" playsinline muted autoplay></video>
   <canvas id="arCanvas"></canvas>
@@ -176,7 +189,12 @@
 
 <script>
 const T={
- ko:{tag:"여러 곳 배송, 가장 빠른 순서로",start:"출발지",startPh:"예: Rua José Paulino, 500, São Paulo",gpsHint:"📍 버튼을 누르면 지금 있는 곳이 출발지가 돼요",
+ ko:{infoLink:"안전·개인정보 안내",testVer:"테스트 버전",infoTitle:"🚚 Rota Certa 사용 전 꼭 읽어 주세요",
+  safeH:"🚗 안전",safe1:"운전 중에는 휴대폰을 손에 들거나 화면을 만지지 마세요. 출발 전에 경로를 만들고, 폰은 거치대에 고정하세요.",safe2:"안내는 참고용이에요. 실제 도로의 신호·표지판·교통 규칙과 경찰 안내가 항상 우선이에요.",safe3:"지도와 경로는 틀릴 수 있어요(공사, 통행 금지, 일방통행 등). 이 앱의 안내로 생긴 사고·벌금·손해는 운전자 책임이에요.",
+  privH:"🔒 개인정보",priv1:"주소는 위치를 찾기 위해 OpenStreetMap(Nominatim) 서버로, 좌표는 경로 계산을 위해 OSRM 서버로 보내져요. 이름·전화번호는 보내지 않아요.",priv2:"현재 위치(GPS)는 안내에만 쓰고 저장하거나 보내지 않아요(경로 계산에 필요한 좌표만 OSRM으로 가요).",priv3:"카메라 화면은 폰 안에서만 보여 주고 녹화·저장·전송하지 않아요.",priv4:"입력한 배송지·이름·전화번호는 이 폰의 브라우저에만 저장돼요. '새 경로 만들기'를 누르면 경로가 지워져요.",
+  srcH:"🗺️ 지도 출처",src1:"지도: OpenFreeMap © OpenMapTiles, 데이터 © OpenStreetMap 기여자(ODbL). 주소 검색: Nominatim. 경로: OSRM.",
+  testH:"🧪 테스트 버전",test1:"지금은 무료 공개 서버를 쓰는 시험 버전이라 판매용이 아니에요. 사용량이 많으면 주소 검색이 잠시 막힐 수 있어요.",
+  infoOk:"확인했어요",startSay2:"안내를 시작합니다. 운전 중에는 화면을 만지지 마세요.",tag:"여러 곳 배송, 가장 빠른 순서로",start:"출발지",startPh:"예: Rua José Paulino, 500, São Paulo",gpsHint:"📍 버튼을 누르면 지금 있는 곳이 출발지가 돼요",
   stops:"배송할 곳",stopsHint:"한 줄에 한 곳씩 써 주세요. 이름과 전화번호는 | 로 나눠서 넣을 수 있어요.\n예: Rua Augusta, 1500, São Paulo | 마리아 | 11 98765-4321",
   stopsPh:"Rua Augusta, 1500, São Paulo | Maria | 11 98765-4321\nAv. Paulista, 1000, São Paulo",round:"마지막에 출발지로 돌아오기",
   go:"🧭 가장 빠른 순서 만들기",sStops:"곳",sTime:"예상 시간",allRoute:"전체 경로 한 번에 열기",allHint:"구글지도는 한 번에 10곳까지만 돼서 나눠서 열어요",
@@ -186,7 +204,12 @@ const T={
   netErr:"인터넷 연결이나 지도 서버에 문제가 있어요. 잠시 후 다시 해 주세요",gpsFail:"위치를 가져오지 못했어요. 주소를 직접 써 주세요",
   myLoc:"내 현재 위치",backHome:"출발지로 돌아오기",min:"분",h:"시간",
   allDone:"🎉 오늘 배송 끝! 수고하셨어요"},
- pt:{tag:"Várias entregas, na ordem mais rápida",start:"Ponto de partida",startPh:"Ex: Rua José Paulino, 500, São Paulo",gpsHint:"Toque em 📍 para usar sua localização atual",
+ pt:{infoLink:"Segurança e privacidade",testVer:"Versão de teste",infoTitle:"🚚 Leia antes de usar o Rota Certa",
+  safeH:"🚗 Segurança",safe1:"Não segure nem toque no celular enquanto dirige. Monte a rota antes de sair e prenda o celular no suporte.",safe2:"As instruções são apenas uma referência. Semáforos, placas, leis de trânsito e agentes de trânsito sempre têm prioridade.",safe3:"Mapas e rotas podem conter erros (obras, vias bloqueadas, mão única). Acidentes, multas ou prejuízos são responsabilidade do motorista.",
+  privH:"🔒 Privacidade",priv1:"Os endereços são enviados ao servidor do OpenStreetMap (Nominatim) para achar a localização, e as coordenadas ao OSRM para calcular a rota. Nomes e telefones não são enviados.",priv2:"Sua localização (GPS) é usada só para a navegação e não é salva nem enviada (só as coordenadas necessárias vão ao OSRM).",priv3:"A imagem da câmera aparece só no celular; não é gravada, salva nem enviada.",priv4:"Entregas, nomes e telefones ficam salvos só no navegador deste celular. 'Nova rota' apaga a rota.",
+  srcH:"🗺️ Fontes do mapa",src1:"Mapa: OpenFreeMap © OpenMapTiles, dados © colaboradores do OpenStreetMap (ODbL). Endereços: Nominatim. Rotas: OSRM.",
+  testH:"🧪 Versão de teste",test1:"Esta é uma versão de teste com servidores públicos gratuitos, não é para venda. Com muito uso, a busca de endereços pode ser bloqueada temporariamente.",
+  infoOk:"Entendi",startSay2:"Iniciando a navegação. Não toque na tela enquanto dirige.",tag:"Várias entregas, na ordem mais rápida",start:"Ponto de partida",startPh:"Ex: Rua José Paulino, 500, São Paulo",gpsHint:"Toque em 📍 para usar sua localização atual",
   stops:"Entregas",stopsHint:"Um endereço por linha. Nome e telefone podem vir depois de |\nEx: Rua Augusta, 1500, São Paulo | Maria | 11 98765-4321",
   stopsPh:"Rua Augusta, 1500, São Paulo | Maria | 11 98765-4321\nAv. Paulista, 1000, São Paulo",round:"Voltar ao ponto de partida no final",
   go:"🧭 Criar a rota mais rápida",sStops:"entregas",sTime:"tempo estimado",allRoute:"Abrir a rota completa",allHint:"O Google Maps aceita até 10 paradas por vez, por isso dividimos",
@@ -267,7 +290,7 @@ const OSRM="https://router.project-osrm.org";
 const cs=pts=>pts.map(p=>p.lon.toFixed(6)+","+p.lat.toFixed(6)).join(";");
 
 let trip=store.get("rc_trip",null);
-let map,layer;
+let map;
 
 $("go").onclick=async()=>{
   const startTxt=$("start").value.trim();
@@ -372,19 +395,34 @@ function render(){
   drawMap(nextIdx);
 }
 
+let ovMarkers=[];
 function drawMap(nextIdx){
-  if(typeof L==="undefined")return;
-  if(!map){map=L.map("map");L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map)}
-  if(layer)layer.remove();
-  layer=L.layerGroup().addTo(map);
-  const line=L.polyline(trip.line.map(c=>[c[1],c[0]]),{color:"#0f766e",weight:5,opacity:.8}).addTo(layer);
-  const pin=(txt,bg)=>L.divIcon({className:"",html:`<div style="background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;border:2px solid #fff;box-shadow:0 1px 4px #0006">${txt}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
-  L.marker([trip.start.lat,trip.start.lon],{icon:pin("S","#111")}).addTo(layer);
-  trip.stops.forEach((s,i)=>{if(s.isEnd)return;
-    const bg=s.done?"#16a34a":(i===nextIdx?"#f59e0b":"#0f766e");
-    L.marker([s.lat,s.lon],{icon:pin(i+1,bg)}).bindPopup(esc(s.name||s.addr)).addTo(layer)});
-  map.fitBounds(line.getBounds(),{padding:[20,20]});
-  setTimeout(()=>map.invalidateSize(),200);
+  if(typeof maplibregl==="undefined")return;
+  const coords=trip.line;
+  const paint=()=>{
+    const src=map.getSource("ov");
+    const data={type:"Feature",geometry:{type:"LineString",coordinates:coords}};
+    if(src)src.setData(data);else{
+      map.addSource("ov",{type:"geojson",data});
+      map.addLayer({id:"ov-line",type:"line",source:"ov",layout:{"line-join":"round","line-cap":"round"},paint:{"line-color":"#0f766e","line-width":5}});
+    }
+    ovMarkers.forEach(m=>m.remove());ovMarkers=[];
+    const pin=(txt,bg)=>{const e=document.createElement("div");e.style.cssText=`background:${bg};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;border:2px solid #fff;box-shadow:0 1px 4px #0006`;e.textContent=txt;return e};
+    ovMarkers.push(new maplibregl.Marker({element:pin("S","#111")}).setLngLat([trip.start.lon,trip.start.lat]).addTo(map));
+    trip.stops.forEach((s,i)=>{if(s.isEnd)return;
+      const bg=s.done?"#16a34a":(i===nextIdx?"#f59e0b":"#0f766e");
+      const el=pin(String(i+1),bg);el.title=s.name||s.addr;
+      ovMarkers.push(new maplibregl.Marker({element:el}).setLngLat([s.lon,s.lat]).addTo(map))});
+    const b=new maplibregl.LngLatBounds();coords.forEach(c=>b.extend(c));
+    map.fitBounds(b,{padding:30,duration:0});
+  };
+  if(!map){
+    try{
+      map=new maplibregl.Map({container:"map",style:"https://tiles.openfreemap.org/styles/liberty",center:coords[0],zoom:12,attributionControl:{compact:true}});
+      map.on("load",paint);
+    }catch(e){console.error(e);return}
+  }else if(map.loaded())paint();else map.once("load",paint);
+  setTimeout(()=>map.resize(),200);
 }
 
 $("reset").onclick=()=>{trip=null;store.set("rc_trip",null);$("result").classList.add("hidden");status("");window.scrollTo({top:0,behavior:"smooth"})};
@@ -524,7 +562,7 @@ async function startNav(i,sim){
   nav.started=false;$("nGo").textContent=nt("go");$("nGo").classList.remove("hidden");
   $("nGo").onclick=()=>{
     if(!nav)return;nav.started=true;$("nGo").classList.add("hidden");
-    try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(nt("startSay"));u.lang=lang==="ko"?"ko-KR":"pt-BR";if(voiceOn)speechSynthesis.speak(u)}catch(e){}
+    try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(nav.sim?nt("startSay"):t("startSay2"));u.lang=lang==="ko"?"ko-KR":"pt-BR";if(voiceOn)speechSynthesis.speak(u)}catch(e){}
     if(nav.sim)nav.timer=setInterval(()=>{nav.simCum+=14;const p=pointAt(nav.simCum);onPos(p,50)},1000);
   };
   if(sim){
@@ -709,6 +747,12 @@ function arLoop(){
   }
   g.globalAlpha=1;
 }
+
+// 안전·개인정보 안내 (처음 한 번 + 아래 링크)
+function showInfo(){$("info").classList.remove("hidden")}
+$("infoOk").onclick=()=>{store.set("rc_info_ok",true);$("info").classList.add("hidden")};
+$("openInfo").onclick=e=>{e.preventDefault();showInfo()};
+if(!store.get("rc_info_ok",false))showInfo();
 
 // 입력값 기억
 $("stops").value=store.get("rc_stops","");$("start").value=store.get("rc_start","");
